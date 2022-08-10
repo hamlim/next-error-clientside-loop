@@ -1,34 +1,27 @@
-This is a [Next.js](https://nextjs.org/) project bootstrapped with [`create-next-app`](https://github.com/vercel/next.js/tree/canary/packages/create-next-app).
+# Next.js SSR error + clientside error loop
 
-## Getting Started
+This repo replicates a minimal demo of a bug (maybe?) in the behavior of Next when hydrating the `_error` entrypoint on the client.
 
-First, run the development server:
+## Steps to replicate:
 
-```bash
-npm run dev
-# or
-yarn dev
-```
+- Clone the repo
+- Run `yarn` (using yarn classic - 1.x)
+- Run `yarn build`
+- Run `yarn start`
+- Visit `localhost:3000`
+- See continuous loop of client side errors
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+## Context:
 
-You can start editing the page by modifying `pages/index.js`. The page auto-updates as you edit the file.
+Our actual application passes some core data (props) via a nested field within the `props` returned from `getServerSideProps` for both our "happy path" pages (e.g. `index.js` here) as well as our `_error.js` page. `_app` then pulls that nested data out of `pageProps` and uses it to render core react context providers we need for all experiences the application renders (including our error pages)!
 
-[API routes](https://nextjs.org/docs/api-routes/introduction) can be accessed on [http://localhost:3000/api/hello](http://localhost:3000/api/hello). This endpoint can be edited in `pages/api/hello.js`.
+In this demo I'm omitting the providers, since all we need to show the issue is destructuring the data from `pageProps` - which replicates where we see the error in our application as well.
 
-The `pages/api` directory is mapped to `/api/*`. Files in this directory are treated as [API routes](https://nextjs.org/docs/api-routes/introduction) instead of React pages.
+## Investigation:
 
-## Learn More
+I briefly dug into the issue in our own application and came away with the following rough notes:
 
-To learn more about Next.js, take a look at the following resources:
-
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js/) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/deployment) for more details.
+1. Client hydration seems to happen in a loop, [`componentDidCatch` on the `Container` component here](https://github.com/vercel/next.js/blob/01888dcb001f83a467088975071ce9c28eb58cad/packages/next/client/index.tsx#L97-L99), seems to call the same [`render` function to re-enter erring `_app` component](https://github.com/vercel/next.js/blob/01888dcb001f83a467088975071ce9c28eb58cad/packages/next/client/index.tsx#L636-L638).
+2. The fallback logic for rendering the `_error` entrypoint seems to conditionally choose to pass the existing props from the server or props fetched from `getInitialProps`
+   a. Should this take into account that `_error` may use `getServerSideProps` and not `getInitialProps`?
+   b. If not, should we continue to use the initial server props if `getInitialProps` isn't defined?

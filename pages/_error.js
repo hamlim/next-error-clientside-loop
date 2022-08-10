@@ -1,9 +1,8 @@
-export default function Home() {
-  return <div>Homepage!</div>;
+export default function Error() {
+  return <div>Error encountered!</div>;
 }
 
 export async function getServerSideProps(context) {
-  throw new Error("Error in index.js getServerSideProps!");
   return {
     props: {
       nestedData: {
